@@ -1,0 +1,31 @@
+{
+  "name": "tontine-sui-scripts",
+  "version": "1.0.0",
+  "description": "Backend scripts for Tontine Sui deployment and interaction",
+  "main": "deploy.js",
+  "scripts": {
+    "deploy": "node deploy.js",
+    "demo": "node demo_helpers.js",
+    "interact": "node interact.js",
+    "test": "echo \"TODO: Add tests\" && exit 0",
+    "lint": "echo \"TODO: Add linting\" && exit 0"
+  },
+  "dependencies": {
+    "@mysten/sui.js": "^0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "keywords": [
+    "sui",
+    "blockchain",
+    "tontine",
+    "collective-savings",
+    "web3"
+  ],
+  "author": "Tontine Sui Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
