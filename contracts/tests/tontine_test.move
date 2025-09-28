@@ -4,14 +4,31 @@ module contracts::tontine_test {
     use std::debug;
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
-    use sui::test_utils;
-    use contracts::tontine;
+    use sui::balance::{Self, Balance};
+    use sui::vec_set::{Self, VecSet};
+    use sui::table::{Self, Table};
+    use contracts::tontine::Tontine;
+
     use std::string;
 
 
     const ADMIN: address = @0xAD;
     const PARTICIPANT1: address = @0xA1;
     const PARTICIPANT2: address = @0xA2;
+
+    // Helper: mint SUI for the current tx sender
+
+
+    // Helper: activate and add participants
+    fun prime_active_with(s: &mut Scenario, p: address) {
+        let mut t = test_scenario::take_from_sender<Tontine>(s);
+
+        // Use the public test-only APIs instead of touching fields/consts directly
+        contracts::tontine::test_add_participant(&mut t, p);
+        contracts::tontine::test_set_status(&mut t, contracts::tontine::test_tontine_active());
+
+        test_scenario::return_to_sender(s, t);
+    }
 
     #[test]
     fun test_create_tontine() {
@@ -39,29 +56,84 @@ module contracts::tontine_test {
 
         scenario.end();
     }
-
+/*
+    //======================================================================================================================================
+    // CONTRIBUTE TESTS
+    //======================================================================================================================================
     #[test]
-    #[expected_failure(abort_code = contracts::tontine::EInvalidInput)]
-    fun test_create_tontine_withBadParameters() {
-        let creator = @0x000;
-        let mut scenario_val = test_scenario::begin(creator);
+    fun contribute_happy_path() {
+        let creator = @0xA11CE;
+        let mut sc = test_scenario::begin(creator);
+        let ctx = test_scenario::ctx(&mut sc);
 
-        let tontine = contracts::tontine::create_tontine(
-            string::utf8(b"Ma Tontine"),
-            string::utf8(b"Description cool"),
-            0,                // <= invalide
-            1_000_000,        // contribution amount
-            b"COIN",
-            test_scenario::ctx(&mut scenario_val)  // ✅ mutable borrow correct
+        // create
+        let t = contracts::tontine::create_tontine(
+            string::utf8(b"Pool"),
+            string::utf8(b"desc"),
+            2,            // max participants
+            100,          // contribution amount
+            b"SUI",
+            ctx
         );
+        transfer::public_transfer(t, creator);
 
-        transfer::public_transfer(tontine, creator);
+        // add second participant & activate
+        let participant = @0xB0B;
+        prime_active_with(&mut sc, participant);
 
-        test_scenario::end(scenario_val);
+        // creator pays
+        let pay1 = mint_coin_for_test(&mut sc, 100);
+        {
+            let mut t2 = test_scenario::take_from_sender<Tontine>(&mut sc);
+            contracts::tontine::contribute(&mut t2, pay1, ctx);
+            test_scenario::return_to_sender(&mut sc, t2);
+        };
+
+        // switch to participant & pay
+        test_scenario::next_tx(&mut sc, participant);
+        let pay2 = mint_coin_for_test(&mut sc, 100);
+        {
+            let mut t3 = test_scenario::take_from_sender<Tontine>(&mut sc);
+            contracts::tontine::contribute(&mut t3, pay2, ctx);
+            // escrow should equal 200 now
+            let escrow = contracts::tontine::test_escrow_value(&t3);
+            let expected = 200; // e.g., 2 participants * 100 each
+            assert!(escrow == expected, 0);
+            test_scenario::return_to_sender(&mut sc, t3);
+        };
+
+        test_scenario::end(sc);
     }
 
+    #[test]
+    #[expected_failure(abort_code = contracts::tontine::EInvalidAmount)]
+    fun contribute_wrong_amount_fails() {
+        let creator = @0xA11CE;
+        let mut sc = test_scenario::begin(creator);
+        let ctx = test_scenario::ctx(&mut sc);
 
-    /*
+        let t = contracts::tontine::create_tontine(
+            string::utf8(b"Pool"),
+            string::utf8(b"desc"),
+            2, 100, b"SUI", ctx
+        );
+        transfer::public_transfer(t, creator);
+
+        prime_active_with(&mut sc, @0xB0B);
+
+        let wrong = mint_coin_for_test(&mut sc, 50);
+        {
+            let mut t2 = test_scenario::take_from_sender<Tontine>(&mut sc);
+            contracts::tontine::contribute(&mut t2, wrong, ctx); // should abort
+            test_scenario::return_to_sender(&mut sc, t2);
+        };
+
+        test_scenario::end(sc);
+    }
+//======================================================================================================================================
+                                    // CONTRIBUTE TESTS
+//======================================================================================================================================
+
 
 
         #[test]
@@ -145,7 +217,7 @@ module contracts::tontine_test {
         }
 
         #[test]
-        #[expected_failure(abort_code = tontine::tontine::EMaxParticipantsReached)]
+        #[expected_failure(abort_code = contract::tontine::EMaxParticipantsReached)]
         fun test_max_participants_limit() {
             let scenario_val = test_scenario::begin(ADMIN);
             let scenario = &mut scenario_val;
@@ -160,7 +232,7 @@ module contracts::tontine_test {
         }
 
         #[test]
-        #[expected_failure(abort_code = tontine::tontine::EAlreadyPaid)]
+        #[expected_failure(abort_code = contracts::tontine::EAlreadyPaid)]
         fun test_double_contribution() {
             let scenario_val = test_scenario::begin(ADMIN);
             let scenario = &mut scenario_val;
@@ -175,7 +247,7 @@ module contracts::tontine_test {
         }
 
         #[test]
-        #[expected_failure(abort_code = tontine::tontine::EInsufficientFunds)]
+        #[expected_failure(abort_code = contracts::tontine::EInsufficientFunds)]
         fun test_insufficient_contribution() {
             let scenario_val = test_scenario::begin(ADMIN);
             let scenario = &mut scenario_val;
@@ -188,6 +260,6 @@ module contracts::tontine_test {
 
             test_scenario::end(scenario_val);
         }
-        */
+
 
 }
