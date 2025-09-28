@@ -1,45 +1,46 @@
-// TODO: Define tontine types and interfaces
+// Types for 100% Winner Lotto (Yield Lotto) on Sui
 
-// Main tontine interface
-export interface Tontine {
+// Main lotto interface - represents a single-round yield lotto
+export interface Lotto {
   id: string;
   creator: string;
   name: string;
   description: string;
   maxParticipants: number;
-  contributionAmount: number;
-  deadlineInterval: number; // in days , week , or month
-  totalRounds: number;
-  currentRound: number;
-  status: TontineStatus;
-  participants: string[];
-  paidParticipants: string[];
-  beneficiaries: string[];
-  totalContributed: number;
+  contributionAmount: number; // Amount each participant must contribute
+  status: LottoStatus;
+  participants: string[]; // List of participant addresses
+  paidParticipants: string[]; // Participants who have contributed
+  winner?: string; // Winner address (if selected)
+  winnerSelected: boolean;
+  fundsDistributed: boolean;
+  totalContributed: number; // Total amount in the pool
+  totalYield: number; // Yield earned from staking
+  winnerPayout: number; // Amount winner receives (contribution + yield)
   createdAt: number;
-  nextDeadline: number;
   coinType: CoinType;
+  stakedAssetsId: string; // ID of staked assets
 }
 
-// TODO: Define tontine status enum
-export enum TontineStatus {
-  CREATED = 0,
-  ACTIVE = 1,
-  COMPLETED = 2,
-  CANCELLED = 3,
+// Lotto status enum
+export enum LottoStatus {
+  CREATED = 0,    // Lotto created, accepting participants
+  ACTIVE = 1,     // All participants joined, collecting contributions
+  COMPLETED = 2,  // Winner selected and funds distributed
+  CANCELLED = 3,  // Lotto cancelled
 }
 
-// TODO: Define supported coin types
+// Supported coin types
 export enum CoinType {
   SUI = 'SUI',
   USDC = 'USDC',
   USDT = 'USDT',
 }
 
-// TODO: Define invitation interface
+// Invitation interface
 export interface Invitation {
   id: string;
-  tontineId: string;
+  lottoId: string;
   inviter: string;
   invitee: string;
   invitationCode: string;
@@ -49,64 +50,63 @@ export interface Invitation {
   expiresAt: number;
 }
 
-// TODO: Define contribution interface
+// Contribution interface
 export interface Contribution {
   id: string;
-  tontineId: string;
+  lottoId: string;
   participant: string;
   amount: number;
-  round: number;
   timestamp: number;
 }
 
-// TODO: Define form interfaces
-export interface CreateTontineForm {
+// Form interfaces
+export interface CreateLottoForm {
   name: string;
   description: string;
   maxParticipants: number;
   contributionAmount: number;
-  deadlineInterval: number; // in days
   coinType: CoinType;
 }
 
-export interface JoinTontineForm {
+export interface JoinLottoForm {
   invitationCode: string;
 }
 
-// TODO: Define statistics interface
-export interface TontineStats {
-  totalTontines: number;
-  activeTontines: number;
-  completedTontines: number;
+// Statistics interface
+export interface LottoStats {
+  totalLottos: number;
+  activeLottos: number;
+  completedLottos: number;
   totalVolume: number;
   averageContribution: number;
+  totalYieldGenerated: number;
 }
 
-// TODO: Define notification interface
+// Notification interface
 export interface Notification {
   id: string;
-  type: 'deadline_reminder' | 'contribution_received' | 'beneficiary_selected' | 'tontine_completed';
+  type: 'contribution_received' | 'winner_selected' | 'lotto_completed' | 'invitation_received';
   title: string;
   message: string;
   timestamp: number;
   read: boolean;
-  tontineId?: string;
+  lottoId?: string;
 }
 
-// TODO: Define user settings interface
+// User settings interface
 export interface UserSettings {
   notifications: {
     email: boolean;
     push: boolean;
-    deadlineReminders: boolean;
     contributionAlerts: boolean;
+    winnerNotifications: boolean;
   };
   defaultCoinType: CoinType;
   language: string;
   timezone: string;
 }
 
-// TODO: Define API response interfaces
+// API response interfaces
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -114,11 +114,11 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-// TODO: Define transaction interface
+// Transaction interface
 export interface Transaction {
   id: string;
   type: 'create' | 'join' | 'contribute' | 'distribute';
-  tontineId: string;
+  lottoId: string;
   participant: string;
   amount: number;
   timestamp: number;
@@ -126,10 +126,17 @@ export interface Transaction {
   txHash?: string;
 }
 
-// TODO: Define wallet interface
+// Wallet interface
 export interface WalletInfo {
   address: string;
   balance: number;
   coinType: CoinType;
   isConnected: boolean;
 }
+
+// Legacy type aliases for backward compatibility
+export type Tontine = Lotto;
+export type TontineStatus = LottoStatus;
+export type CreateTontineForm = CreateLottoForm;
+export type JoinTontineForm = JoinLottoForm;
+export type TontineStats = LottoStats;

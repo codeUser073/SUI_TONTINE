@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { formatCurrency } from '../src/utils/formatting';
 import { useWalletInfo } from '../src/hooks/useWallet';
 import { useTontine } from '../src/hooks/useTontine';
-import { Tontine, TontineStatus } from '../src/types/tontine';
+import { Lotto, LottoStatus } from '../src/types/tontine';
 import { ConnectButton } from '../components/ConnectButton';
 import { 
   Users, 
@@ -30,96 +31,99 @@ import { toast } from 'react-hot-toast';
 export default function Dashboard() {
   const { currentAccount } = useWalletInfo();
   const { getUserTontines, contribute, selectBeneficiary, isLoading } = useTontine();
-  const [tontines, setTontines] = useState<Tontine[]>([]);
-  const [isLoadingTontines, setIsLoadingTontines] = useState(true);
+  const [lottos, setLottos] = useState<Lotto[]>([]);
+  const [isLoadingLottos, setIsLoadingLottos] = useState(true);
   const [filter, setFilter] = useState<'all' | 'created' | 'joined' | 'active' | 'completed'>('all');
 
-  // TODO: Implement tontines loading
+  // TODO: Implement lottos loading
   useEffect(() => {
-    const loadTontines = async () => {
+    const loadLottos = async () => {
       if (!currentAccount) return;
       
-      setIsLoadingTontines(true);
+      setIsLoadingLottos(true);
       try {
-        const userTontines = await getUserTontines();
-        setTontines(userTontines);
+        const userLottos = await getUserTontines();
+        setLottos(userLottos);
       } catch (error) {
-        console.error('Failed to load tontines:', error);
-        toast.error('Failed to load your tontines');
+        console.error('Failed to load lottos:', error);
+        toast.error('Failed to load your lottos');
       } finally {
-        setIsLoadingTontines(false);
+        setIsLoadingLottos(false);
       }
     };
 
-    loadTontines();
+    loadLottos();
   }, [currentAccount, getUserTontines]);
 
   // TODO: Implement contribution
-  const handleContribute = async (tontineId: string) => {
+  const handleContribute = async (lottoId: string) => {
     try {
-      await contribute(tontineId, 'payment-coin-id');
+      // For now, we'll use a placeholder coin ID
+      // In a real implementation, you would get the user's SUI coin ID
+      const paymentCoinId = 'placeholder-coin-id';
+      await contribute(lottoId, paymentCoinId);
       toast.success('Contribution successful!');
-      // TODO: Refresh tontine data
+      // TODO: Refresh lotto data
     } catch (error) {
       console.error('Failed to contribute:', error);
       toast.error('Failed to contribute. Please try again.');
     }
   };
 
-  // TODO: Implement beneficiary selection
-  const handleSelectBeneficiary = async (tontineId: string) => {
+  // TODO: Implement winner selection
+  const handleSelectWinner = async (lottoId: string) => {
     try {
-      await selectBeneficiary(tontineId);
-      toast.success('Beneficiary selected successfully!');
-      // TODO: Refresh tontine data
+      await selectBeneficiary(lottoId);
+      toast.success('Winner selected successfully!');
+      // TODO: Refresh lotto data
     } catch (error) {
-      console.error('Failed to select beneficiary:', error);
-      toast.error('Failed to select beneficiary. Please try again.');
+      console.error('Failed to select winner:', error);
+      toast.error('Failed to select winner. Please try again.');
     }
   };
 
-  // ✅ Enhanced status badge with proper TontineStatus enum
-  const getStatusBadge = (status: TontineStatus) => {
+  // ✅ Enhanced status badge with proper LottoStatus enum
+  const getStatusBadge = (status: LottoStatus) => {
     switch (status) {
-      case TontineStatus.CREATED:
+      case LottoStatus.CREATED:
         return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400">Created</Badge>;
-      case TontineStatus.ACTIVE:
+      case LottoStatus.ACTIVE:
         return <Badge variant="secondary" className="bg-green-500/20 text-green-400">Active</Badge>;
-      case TontineStatus.COMPLETED:
+      case LottoStatus.COMPLETED:
         return <Badge variant="secondary" className="bg-blue-500/20 text-blue-400">Completed</Badge>;
-      case TontineStatus.CANCELLED:
+      case LottoStatus.CANCELLED:
         return <Badge variant="secondary" className="bg-red-500/20 text-red-400">Cancelled</Badge>;
       default:
         return <Badge variant="secondary">Unknown</Badge>;
     }
   };
 
-  // ✅ Check if user is the creator of a tontine
-  const isCreator = (tontine: Tontine) => {
-    return currentAccount?.address === tontine.creator;
+  // ✅ Check if user is the creator of a lotto
+  const isCreator = (lotto: Lotto) => {
+    return currentAccount?.address === lotto.creator;
   };
 
   // ✅ Check if user has contributed to current round
-  const hasContributed = (tontine: Tontine) => {
-    return tontine.paidParticipants.includes(currentAccount?.address || '');
+  const hasContributed = (lotto: Lotto) => {
+    return lotto.paidParticipants.includes(currentAccount?.address || '');
   };
 
-  // ✅ Check if user is a beneficiary
-  const isBeneficiary = (tontine: Tontine) => {
-    return tontine.beneficiaries.includes(currentAccount?.address || '');
+  // ✅ Check if user is the winner
+  const isWinner = (lotto: Lotto) => {
+    return lotto.winner === currentAccount?.address;
   };
 
-  // ✅ Filter tontines based on selected filter
-  const filteredTontines = tontines.filter(tontine => {
+  // ✅ Filter lottos based on selected filter
+  const filteredLottos = lottos.filter(lotto => {
     switch (filter) {
       case 'created':
-        return isCreator(tontine);
+        return isCreator(lotto);
       case 'joined':
-        return !isCreator(tontine);
+        return !isCreator(lotto);
       case 'active':
-        return tontine.status === TontineStatus.ACTIVE;
+        return lotto.status === LottoStatus.ACTIVE;
       case 'completed':
-        return tontine.status === TontineStatus.COMPLETED;
+        return lotto.status === LottoStatus.COMPLETED;
       default:
         return true;
     }
@@ -136,7 +140,7 @@ export default function Dashboard() {
                 <Target className="w-16 h-16 text-primary-400 mx-auto mb-4" />
                 <CardTitle className="text-2xl font-bold text-white">Connect Your Wallet</CardTitle>
                 <CardDescription className="text-white/70">
-                  You need to connect your wallet to view your tontines.
+                  You need to connect your wallet to view your lottos.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -165,7 +169,7 @@ export default function Dashboard() {
               <div className="p-2 bg-primary-600 rounded-lg">
                 <Target className="w-6 h-6 text-white" />
               </div>
-              <span className="text-white text-xl font-bold">Darte</span>
+                <span className="text-white text-xl font-bold">Yield Lotto</span>
             </Link>
             
             {/* User Info */}
@@ -175,7 +179,7 @@ export default function Dashboard() {
                   {currentAccount ? `${currentAccount.address.slice(0, 6)}...${currentAccount.address.slice(-4)}` : 'Not connected'}
                 </p>
                 <p className="text-white/60 text-xs">
-                  {tontines.length} dartes • {tontines.filter(t => t.status === TontineStatus.ACTIVE).length} active
+                  {lottos.length} lottos • {lottos.filter(t => t.status === LottoStatus.ACTIVE).length} active
                 </p>
               </div>
               <ConnectButton />
@@ -207,13 +211,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <Card className="bg-white/10 backdrop-blur-sm border-white/20">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-white/70">Total Dartes</CardTitle>
+                <CardTitle className="text-sm font-medium text-white/70">Total Lottos</CardTitle>
                 <Target className="h-4 w-4 text-primary-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-white">{tontines.length}</div>
+                <div className="text-2xl font-bold text-white">{lottos.length}</div>
                 <p className="text-xs text-white/60">
-                  {tontines.filter(t => isCreator(t)).length} created, {tontines.filter(t => !isCreator(t)).length} joined
+                  {lottos.filter(t => isCreator(t)).length} created, {lottos.filter(t => !isCreator(t)).length} joined
                 </p>
               </CardContent>
             </Card>
@@ -225,10 +229,10 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  {tontines.filter(t => t.status === TontineStatus.ACTIVE).length}
+                  {lottos.filter(t => t.status === LottoStatus.ACTIVE).length}
                 </div>
                 <p className="text-xs text-white/60">
-                  {tontines.filter(t => t.status === TontineStatus.ACTIVE && !hasContributed(t)).length} need contribution
+                  {lottos.filter(t => t.status === LottoStatus.ACTIVE && !hasContributed(t)).length} need contribution
                 </p>
               </CardContent>
             </Card>
@@ -240,25 +244,25 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  {tontines.filter(t => t.status === TontineStatus.COMPLETED).length}
+                  {lottos.filter(t => t.status === LottoStatus.COMPLETED).length}
                 </div>
                 <p className="text-xs text-white/60">
-                  {tontines.filter(t => t.status === TontineStatus.COMPLETED && isBeneficiary(t)).length} as beneficiary
+                  {lottos.filter(t => t.status === LottoStatus.COMPLETED && isWinner(t)).length} as winner
                 </p>
               </CardContent>
             </Card>
 
             <Card className="bg-white/10 backdrop-blur-sm border-white/20">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-white/70">Total Contributed</CardTitle>
+                <CardTitle className="text-sm font-medium text-white/70">Total Pool Value</CardTitle>
                 <Coins className="h-4 w-4 text-yellow-400" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  {tontines.reduce((sum, t) => sum + t.totalContributed, 0).toFixed(2)} SUI
+                  {formatCurrency(lottos.reduce((sum, t) => sum + t.totalContributed, 0))} SUI
                 </div>
                 <p className="text-xs text-white/60">
-                  {tontines.filter(t => t.status === TontineStatus.COMPLETED && isBeneficiary(t)).length} rounds won
+                  {lottos.filter(t => t.status === LottoStatus.COMPLETED && isWinner(t)).length} lottos won
                 </p>
               </CardContent>
             </Card>
@@ -273,7 +277,7 @@ export default function Dashboard() {
               className={filter === 'all' ? 'bg-primary-600' : 'border-white/20 text-white hover:bg-white/10'}
             >
               <Filter className="w-4 h-4 mr-2" />
-              All ({tontines.length})
+              All ({lottos.length})
             </Button>
             <Button
               variant={filter === 'created' ? 'default' : 'outline'}
@@ -282,7 +286,7 @@ export default function Dashboard() {
               className={filter === 'created' ? 'bg-primary-600' : 'border-white/20 text-white hover:bg-white/10'}
             >
               <Crown className="w-4 h-4 mr-2" />
-              Created ({tontines.filter(t => isCreator(t)).length})
+              Created ({lottos.filter(t => isCreator(t)).length})
             </Button>
             <Button
               variant={filter === 'joined' ? 'default' : 'outline'}
@@ -291,7 +295,7 @@ export default function Dashboard() {
               className={filter === 'joined' ? 'bg-primary-600' : 'border-white/20 text-white hover:bg-white/10'}
             >
               <UserPlus className="w-4 h-4 mr-2" />
-              Joined ({tontines.filter(t => !isCreator(t)).length})
+              Joined ({lottos.filter(t => !isCreator(t)).length})
             </Button>
             <Button
               variant={filter === 'active' ? 'default' : 'outline'}
@@ -300,7 +304,7 @@ export default function Dashboard() {
               className={filter === 'active' ? 'bg-primary-600' : 'border-white/20 text-white hover:bg-white/10'}
             >
               <TrendingUp className="w-4 h-4 mr-2" />
-              Active ({tontines.filter(t => t.status === TontineStatus.ACTIVE).length})
+              Active ({lottos.filter(t => t.status === LottoStatus.ACTIVE).length})
             </Button>
             <Button
               variant={filter === 'completed' ? 'default' : 'outline'}
@@ -309,12 +313,12 @@ export default function Dashboard() {
               className={filter === 'completed' ? 'bg-primary-600' : 'border-white/20 text-white hover:bg-white/10'}
             >
               <CheckCircle className="w-4 h-4 mr-2" />
-              Completed ({tontines.filter(t => t.status === TontineStatus.COMPLETED).length})
+              Completed ({lottos.filter(t => t.status === LottoStatus.COMPLETED).length})
             </Button>
           </div>
 
           {/* Action Required Section */}
-          {tontines.filter(t => t.status === TontineStatus.ACTIVE && !hasContributed(t)).length > 0 && (
+          {lottos.filter(t => t.status === LottoStatus.ACTIVE && !hasContributed(t)).length > 0 && (
             <Card className="bg-yellow-500/10 backdrop-blur-sm border-yellow-500/20">
               <CardHeader>
                 <CardTitle className="text-yellow-400 flex items-center">
@@ -322,23 +326,23 @@ export default function Dashboard() {
                   Action Required
                 </CardTitle>
                 <CardDescription className="text-yellow-300/70">
-                  You have {tontines.filter(t => t.status === TontineStatus.ACTIVE && !hasContributed(t)).length} dartes that need your contribution.
+                  You have {lottos.filter(t => t.status === LottoStatus.ACTIVE && !hasContributed(t)).length} lottos that need your contribution.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {tontines
-                    .filter(t => t.status === TontineStatus.ACTIVE && !hasContributed(t))
+                  {lottos
+                    .filter(t => t.status === LottoStatus.ACTIVE && !hasContributed(t))
                     .slice(0, 3)
-                    .map((tontine) => (
-                      <div key={tontine.id} className="bg-white/5 rounded-lg p-4">
-                        <h4 className="text-white font-medium mb-2">{tontine.name}</h4>
+                    .map((lotto) => (
+                      <div key={lotto.id} className="bg-white/5 rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-2">{lotto.name}</h4>
                         <p className="text-white/70 text-sm mb-3">
-                          Contribute {tontine.contributionAmount} {tontine.coinType}
+                          Contribute {lotto.contributionAmount} {lotto.coinType}
                         </p>
                         <Button
                           size="sm"
-                          onClick={() => handleContribute(tontine.id)}
+                          onClick={() => handleContribute(lotto.id)}
                           disabled={isLoading}
                           className="bg-yellow-600 hover:bg-yellow-700 w-full"
                         >
@@ -352,32 +356,32 @@ export default function Dashboard() {
             </Card>
           )}
 
-          {/* Tontines List */}
+          {/* Lottos List */}
           <div className="space-y-6">
-            {isLoadingTontines ? (
+            {isLoadingLottos ? (
               <div className="text-center py-12">
                 <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-white/70">Loading your dartes...</p>
+                <p className="text-white/70">Loading your lottos...</p>
               </div>
-            ) : filteredTontines.length === 0 ? (
+            ) : filteredLottos.length === 0 ? (
               <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardContent className="text-center py-12">
                   <Target className="w-16 h-16 text-white/30 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-white mb-2">No Dartes Yet</h3>
+                  <h3 className="text-xl font-semibold text-white mb-2">No Lottos Yet</h3>
                   <p className="text-white/70 mb-6">
-                    You haven't created or joined any dartes yet.
+                    You haven't created or joined any lottos yet.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
                     <Link href="/create">
                       <Button className="bg-primary-600 hover:bg-primary-700">
                         <Plus className="w-4 h-4 mr-2" />
-                        Create Darte
+                        Create Lotto
                       </Button>
                     </Link>
                     <Link href="/join">
                       <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
                         <Users className="w-4 h-4 mr-2" />
-                        Join Darte
+                        Join Lotto
                       </Button>
                     </Link>
                   </div>
@@ -385,29 +389,29 @@ export default function Dashboard() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {filteredTontines.map((tontine) => (
-                  <Card key={tontine.id} className="bg-white/10 backdrop-blur-sm border-white/20">
+                {filteredLottos.map((lotto) => (
+                  <Card key={lotto.id} className="bg-white/10 backdrop-blur-sm border-white/20">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
-                            <CardTitle className="text-lg text-white">{tontine.name}</CardTitle>
-                            {isCreator(tontine) && (
+                            <CardTitle className="text-lg text-white">{lotto.name}</CardTitle>
+                            {isCreator(lotto) && (
                               <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
                                 Creator
                               </Badge>
                             )}
-                            {isBeneficiary(tontine) && (
+                            {isWinner(lotto) && (
                               <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-400 text-xs">
-                                Beneficiary
+                                Winner
                               </Badge>
                             )}
                           </div>
                           <CardDescription className="text-white/70">
-                            {tontine.description}
+                            {lotto.description}
                           </CardDescription>
                         </div>
-                        {getStatusBadge(tontine.status)}
+                        {getStatusBadge(lotto.status)}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -418,7 +422,7 @@ export default function Dashboard() {
                             <span className="text-white/70 text-sm">Participants</span>
                           </div>
                           <p className="text-white font-medium">
-                            {tontine.participants.length} / {tontine.maxParticipants}
+                            {lotto.participants.length} / {lotto.maxParticipants}
                           </p>
                         </div>
 
@@ -428,46 +432,48 @@ export default function Dashboard() {
                             <span className="text-white/70 text-sm">Contribution</span>
                           </div>
                           <p className="text-white font-medium">
-                            {tontine.contributionAmount} {tontine.coinType}
+                            {lotto.contributionAmount} {lotto.coinType}
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <Calendar className="w-4 h-4 text-primary-400" />
-                            <span className="text-white/70 text-sm">Round</span>
+                            <span className="text-white/70 text-sm">Status</span>
                           </div>
                           <p className="text-white font-medium">
-                            {tontine.currentRound} / {tontine.totalRounds}
+                            {lotto.status === LottoStatus.CREATED ? 'Open' : 
+                             lotto.status === LottoStatus.ACTIVE ? 'Active' : 
+                             lotto.status === LottoStatus.COMPLETED ? 'Completed' : 'Cancelled'}
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <Clock className="w-4 h-4 text-primary-400" />
-                            <span className="text-white/70 text-sm">Next Deadline</span>
+                            <span className="text-white/70 text-sm">Total Pool</span>
                           </div>
                           <p className="text-white font-medium text-sm">
-                            {new Date(tontine.nextDeadline).toLocaleDateString()}
+                            {lotto.maxParticipants * lotto.contributionAmount} {lotto.coinType}
                           </p>
                         </div>
                       </div>
 
                       <div className="border-t border-white/20 pt-4">
                         <div className="flex justify-between items-center mb-4">
-                          <span className="text-white/70">Total Amount:</span>
+                          <span className="text-white/70">Total Pool:</span>
                           <span className="text-white font-bold">
-                            {tontine.maxParticipants * tontine.contributionAmount} {tontine.coinType}
+                            {lotto.maxParticipants * lotto.contributionAmount} {lotto.coinType}
                           </span>
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2">
-                          {tontine.status === TontineStatus.ACTIVE && (
+                          {lotto.status === LottoStatus.ACTIVE && (
                             <>
-                              {!hasContributed(tontine) && (
+                              {!hasContributed(lotto) && (
                                 <Button
                                   size="sm"
-                                  onClick={() => handleContribute(tontine.id)}
+                                  onClick={() => handleContribute(lotto.id)}
                                   disabled={isLoading}
                                   className="bg-green-600 hover:bg-green-700"
                                 >
@@ -476,7 +482,7 @@ export default function Dashboard() {
                                 </Button>
                               )}
                               
-                              {hasContributed(tontine) && (
+                              {hasContributed(lotto) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -488,16 +494,16 @@ export default function Dashboard() {
                                 </Button>
                               )}
                               
-                              {isCreator(tontine) && (
+                              {isCreator(lotto) && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleSelectBeneficiary(tontine.id)}
+                                  onClick={() => handleSelectWinner(lotto.id)}
                                   disabled={isLoading}
                                   className="border-white/20 text-white hover:bg-white/10"
                                 >
                                   <Target className="w-4 h-4 mr-2" />
-                                  Select Beneficiary
+                                  Select Winner
                                 </Button>
                               )}
                             </>

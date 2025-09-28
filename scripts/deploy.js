@@ -1,110 +1,74 @@
+#!/usr/bin/env node
+
+/**
+ * Deployment script for Sui Yield Lotto
+ * Deploys all contracts and sets up initial configuration
+ */
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// TODO: Update configuration
-const CONTRACT_PATH = path.join(__dirname, '../contracts');
-const OUTPUT_FILE = path.join(__dirname, 'contract.json');
+// Configuration
+const PACKAGE_NAME = 'contracts';
+const NETWORK = 'testnet'; // Change to 'mainnet' for production
+const GAS_BUDGET = 100000000; // 0.1 SUI
 
-async function deployContract() {
-    try {
-        console.log('🚀 Deploying Tontine Sui contract...');
-        
-        // TODO: Check if Sui CLI is installed
-        try {
-            execSync('sui --version', { stdio: 'pipe' });
-        } catch (error) {
-            console.error('❌ Sui CLI not found. Please install it first:');
-            console.error('   curl -fLJO https://github.com/MystenLabs/sui/releases/latest/download/sui-macos-x86_64.tgz');
-            process.exit(1);
-        }
+console.log('🚀 Deploying Sui Yield Lotto Contracts...\n');
 
-        // TODO: Build the contract
-        console.log('📦 Building contract...');
-        execSync('sui move build', { 
-            cwd: CONTRACT_PATH,
-            stdio: 'inherit'
-        });
+try {
+    // Check if sui CLI is installed
+    console.log('📋 Checking Sui CLI installation...');
+    execSync('sui --version', { stdio: 'pipe' });
+    console.log('✅ Sui CLI found\n');
 
-        // TODO: Deploy the contract
-        console.log('🚀 Deploying contract...');
-        const deployOutput = execSync('sui client publish --gas-budget 100000000', {
-            cwd: CONTRACT_PATH,
-            encoding: 'utf8'
-        });
+    // Build the project
+    console.log('🔨 Building Move contracts...');
+    execSync('sui move build', { 
+        cwd: path.join(__dirname, 'contracts'),
+        stdio: 'inherit' 
+    });
+    console.log('✅ Build successful\n');
 
-        // TODO: Parse deployment output to extract package ID
-        const packageIdMatch = deployOutput.match(/Published Objects:\s*(\w+)/);
-        if (!packageIdMatch) {
-            throw new Error('Could not find package ID in deployment output');
-        }
+    // Deploy the package
+    console.log('📦 Deploying package to', NETWORK, '...');
+    const deployOutput = execSync(`sui client publish --gas-budget ${GAS_BUDGET}`, {
+        cwd: path.join(__dirname, 'contracts'),
+        encoding: 'utf8'
+    });
+    
+    console.log('✅ Deployment successful!\n');
+    console.log('📄 Deployment output:');
+    console.log(deployOutput);
 
+    // Extract package ID from output
+    const packageIdMatch = deployOutput.match(/Published Objects:\s*(\w+)/);
+    if (packageIdMatch) {
         const packageId = packageIdMatch[1];
-        console.log(`✅ Contract deployed successfully!`);
-        console.log(`📦 Package ID: ${packageId}`);
-
-        // TODO: Save deployment information
-        const contractInfo = {
+        console.log(`\n🎉 Package deployed with ID: ${packageId}`);
+        
+        // Save deployment info
+        const deploymentInfo = {
             packageId,
-            deployedAt: new Date().toISOString(),
-            network: 'testnet', // Change to 'mainnet' for production
-            contractPath: CONTRACT_PATH,
-            contractName: 'TontineSui',
-            version: '1.0.0'
+            network: NETWORK,
+            timestamp: new Date().toISOString(),
+            gasBudget: GAS_BUDGET
         };
-
-        fs.writeFileSync(OUTPUT_FILE, JSON.stringify(contractInfo, null, 2));
-        console.log(`💾 Contract info saved to ${OUTPUT_FILE}`);
-
-        return contractInfo;
-
-    } catch (error) {
-        console.error('❌ Deployment failed:', error.message);
-        process.exit(1);
+        
+        fs.writeFileSync(
+            path.join(__dirname, 'deployment.json'),
+            JSON.stringify(deploymentInfo, null, 2)
+        );
+        
+        console.log('💾 Deployment info saved to deployment.json');
     }
-}
 
-// TODO: Implement contract verification
-async function verifyContract() {
-    try {
-        console.log('🔍 Verifying contract...');
-        
-        // TODO: Add contract verification logic
-        // This could include:
-        // - Checking contract source code
-        // - Verifying deployment on explorer
-        // - Running tests
-        
-        console.log('✅ Contract verification completed');
-    } catch (error) {
-        console.error('❌ Contract verification failed:', error.message);
-    }
-}
+    console.log('\n🎯 Next steps:');
+    console.log('1. Update your frontend configuration with the new package ID');
+    console.log('2. Test the contracts using the interaction script');
+    console.log('3. Set up your staking pool and create your first tontine');
 
-// TODO: Implement contract upgrade
-async function upgradeContract() {
-    try {
-        console.log('⬆️ Upgrading contract...');
-        
-        // TODO: Add contract upgrade logic
-        // This would typically involve:
-        // - Building new version
-        // - Deploying upgrade
-        // - Migrating data if needed
-        
-        console.log('✅ Contract upgrade completed');
-    } catch (error) {
-        console.error('❌ Contract upgrade failed:', error.message);
-    }
+} catch (error) {
+    console.error('❌ Deployment failed:', error.message);
+    process.exit(1);
 }
-
-// TODO: Run deployment if this script is executed directly
-if (require.main === module) {
-    deployContract();
-}
-
-module.exports = { 
-    deployContract,
-    verifyContract,
-    upgradeContract
-};

@@ -1,7 +1,7 @@
 // TODO: Network configuration for Tontine Sui
 // Based on the BSA template pattern
 
-export const TESTNET_TONTINE_PACKAGE_ID = "YOUR_PACKAGE_ID_HERE";
+export const TESTNET_TONTINE_PACKAGE_ID = "0x5319ff60b661bc8f48374dc8e7a63bcef4847bee2d4b7df5722139dc91f53023";
 
 // TODO: Add mainnet configuration when ready
 export const MAINNET_TONTINE_PACKAGE_ID = "YOUR_MAINNET_PACKAGE_ID_HERE";

@@ -12,6 +12,7 @@ module contracts::tontine {
     use std::string::String;
     use std::string;
     use contracts::staking_protocol;
+    use contracts::randomness;
     use std::debug;
     use sui::url::{Self, Url};
 
@@ -124,12 +125,18 @@ module contracts::tontine {
         total_amount: u64,
     }
 
+    public struct TontineStaked has copy, drop {
+        tontine_id: ID,
+        validator_address: address,
+        amount: u64,
+    }
+
     public struct FundsDistributed has copy, drop {
         tontine_id: ID,
         winner: address,
-        winner_payout: u64,
+        winner_amount: u64,
         total_participants: u64,
-        bonus_amount: u64,
+        yield_amount: u64,
         round: u64,
     }
 
@@ -139,13 +146,13 @@ module contracts::tontine {
         description: String,
         max_participants: u64,
         contribution_amount: u64,
-        // deadline_interval: u64,
+        deadline_interval: u64,
         coin_type: vector<u8>,
         ctx: &mut TxContext
         // TODO: Faire un appel => add participant avec le createur en paramètre
     ): Tontine {
         assert!(max_participants > 0 && contribution_amount > 0, EInvalidInput);
-        let id = object:: new (ctx);
+        let id = object::new(ctx);
         let creator = tx_context::sender(ctx); // à check
 
         // TODO: Create tontine struct
@@ -192,18 +199,51 @@ module contracts::tontine {
         }
     }
 
-    // TODO: Implement join_tontine function
+    // Entry function to create tontine and transfer to sender
+    public entry fun create_tontine_entry(
+        name: String,
+        description: String,
+        max_participants: u64,
+        contribution_amount: u64,
+        deadline_interval: u64,
+        coin_type: vector<u8>,
+        ctx: &mut TxContext
+    ) {
+        let tontine = create_tontine(name, description, max_participants, contribution_amount, deadline_interval, coin_type, ctx);
+        transfer::public_transfer(tontine, tx_context::sender(ctx));
+    }
+
+    // Join tontine using invitation code
     public fun join_tontine(
         tontine: &mut Tontine,
         invitation_code: vector<u8>,
         ctx: &mut TxContext
     ) {
-        // TODO: Validate invitation code
-        // TODO: Check if tontine is accepting new participants
-        // TODO: Add participant to tontine
-        // TODO: Emit ParticipantJoined event
-        // TODO: Activate tontine if all participants joined
-        abort 0 // Placeholder - implement this function
+        let sender = tx_context::sender(ctx);
+        
+        // Check if tontine is active and accepting participants
+        assert!(tontine.status == TONTINE_ACTIVE, ETontineNotActive);
+        
+        // Check if sender is not already a participant
+        assert!(!vec_set::contains(&tontine.participants, &sender), EAlreadyParticipant);
+        
+        // Check if tontine has space for more participants
+        let current_participants = vec_set::length(&tontine.participants);
+        assert!(current_participants < tontine.max_participants, EMaxParticipantsReached);
+        
+        // TODO: Validate invitation code (for now, we'll skip validation)
+        // In a real implementation, you would validate the invitation code
+        // against the invitation system
+        
+        // Add participant to tontine
+        vec_set::insert(&mut tontine.participants, sender);
+        
+        // Emit ParticipantJoined event
+        event::emit(ParticipantJoined {
+            tontine_id: uid_to_inner(&tontine.id),
+            participant: sender,
+            total_participants: vec_set::length(&tontine.participants),
+        });
     }
 
     // Implement contribute function
@@ -263,6 +303,8 @@ module contracts::tontine {
 
     }
 
+
+
     #[test_only]
     public fun test_set_status(t: &mut Tontine, s: u8) {
         t.status = s;
@@ -297,25 +339,86 @@ module contracts::tontine {
 
 
 
+
     // TODO: Implement select_beneficiary function
     public fun select_beneficiary(
         tontine: &mut Tontine,
         ctx: &mut TxContext
     ) {
-        // TODO: Validate only creator can call this
-        // TODO: Check if all participants have paid
-        // TODO: Implement rotation algorithm
-        // TODO: Select beneficiary for current round
-        // TODO: Add to beneficiaries list
-        // TODO: Emit BeneficiarySelected event
-        // TODO: Reset for next round
-        // TODO: Check if tontine is completed
-        abort 0 // Placeholder - implement this function
+        let sender = tx_context::sender(ctx);
+        
+        // Validate only creator can call this
+        assert!(sender == tontine.creator, ENotCreator);
+        
+        // Check if tontine is active
+        assert!(tontine.status == TONTINE_ACTIVE, ETontineNotActive);
+        
+        // Check if all participants have paid for current round
+        let total_participants = vec_set::length(&tontine.participants);
+        let paid_count = if (table::contains(&tontine.paid_participants, tontine.current_round)) {
+            let paid_for_round = table::borrow(&tontine.paid_participants, tontine.current_round);
+            vec_set::length(paid_for_round)
+        } else {
+            0
+        };
+        assert!(paid_count == total_participants, EInvalidInput);
+        
+        // Simple rotation algorithm - select next participant in order
+        let participants_vec = vec_set::into_keys(tontine.participants);
+        let winner_index = tontine.current_round % total_participants;
+        let winner = *vector::borrow(&participants_vec, winner_index);
+        
+        // Set winner
+        tontine.winner_address = winner;
+        tontine.winner_selected = true;
+        
+        // Add to beneficiaries list
+        table::add(&mut tontine.beneficiaries, tontine.current_round, winner);
+        
+        // Emit BeneficiarySelected event
+        event::emit(BeneficiarySelected {
+            tontine_id: uid_to_inner(&tontine.id),
+            beneficiary: winner,
+            round: tontine.current_round,
+            amount: tontine.contribution_amount,
+        });
     }
 
-    // Implement distribute_funds function
+    // Create invitation (simplified version for frontend compatibility)
+    public fun create_invitation(
+        tontine: &mut Tontine,
+        invitee: address,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Only creator can create invitations
+        assert!(sender == tontine.creator, ENotCreator);
+        
+        // Check if tontine is active
+        assert!(tontine.status == TONTINE_ACTIVE, ETontineNotActive);
+        
+        // Generate a simple invitation code (in real implementation, this would be more sophisticated)
+        let invitation_code = string::utf8(b"INVITE_CODE_PLACEHOLDER");
+        
+        // Create invitation using the invitation module
+        let invitation = contracts::invitation::create_invitation(
+            uid_to_inner(&tontine.id),
+            invitee,
+            invitation_code,
+            string::utf8(b"https://tontine.app/invite"),
+            ctx
+        );
+        
+        // Transfer invitation to creator (they can then share it)
+        transfer::public_transfer(invitation, sender);
+    }
+
+    // Implement distribute_funds function with enhanced staking integration
     public entry fun distribute_funds(
         tontine: &mut Tontine,
+        staking_pool: &mut contracts::enhanced_staking::EnhancedStakingPool,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
         let sender = tx_context::sender(ctx);
@@ -324,35 +427,36 @@ module contracts::tontine {
         assert!(sender == tontine.creator, ENotCreator);
         assert!(tontine.winner_selected, ENoWinnerSelected);
         assert!(!tontine.funds_distributed, EAlreadyDistributed);
-        assert!(tontine.participants.contains(&tontine.winner_address), EInvalidWinner);
+        assert!(vec_set::contains(&tontine.participants, &tontine.winner_address), EInvalidWinner);
 
-        // 2) Pull back everything from staking into escrow (principal + rewards)
-        //    Assumes your staking module returns Balance<SUI>.
-        let rewards_bal = staking_protocol::claim_rewards(&tontine.id, ctx);
-        tontine.escrow_balance.join(rewards_bal);
-
-        let principal_bal = staking_protocol::unstake_all(&tontine.id, ctx);
-        tontine.escrow_balance.join(principal_bal);
+        // 2) Get staking rewards from enhanced staking pool
+        let staking_rewards = contracts::enhanced_staking::get_total_rewards(staking_pool);
 
         // 3) Compute principal & yield
-        let total_participants = tontine.participants.size();
+        let total_participants = vec_set::length(&tontine.participants);
         let total_principal = total_participants * tontine.contribution_amount;
 
-        let escrow_now = tontine.escrow_balance.value();
+        let escrow_now = balance::value(&tontine.escrow_balance);
         assert!(escrow_now >= total_principal, EInsufficientFunds);
 
-        let yield_amount = if (escrow_now > total_principal) { escrow_now - total_principal } else { 0 };
-        let winner_payout = tontine.contribution_amount + yield_amount;
+        // Total yield includes staking rewards + any additional escrow growth
+        let additional_yield = if (escrow_now > total_principal) { 
+            escrow_now - total_principal 
+        } else { 
+            0 
+        };
+        let total_yield = staking_rewards + additional_yield;
+        let winner_payout = tontine.contribution_amount + total_yield;
 
         // 4) Pay everyone: winner gets (deposit + yield), others get (deposit)
         let participants_vec = vec_set::into_keys(tontine.participants);
         let len = vector::length(&participants_vec);
         let mut i = 0;
         while (i < len) {
-            let p = participants_vec[i];
+            let p = *vector::borrow(&participants_vec, i);
             let pay_amt = if (p == tontine.winner_address) { winner_payout } else { tontine.contribution_amount };
 
-            let out_bal = tontine.escrow_balance.split(pay_amt);
+            let out_bal = balance::split(&mut tontine.escrow_balance, pay_amt);
             let out_coin = coin::from_balance(out_bal, ctx);
             transfer::public_transfer(out_coin, p);
 
@@ -360,7 +464,7 @@ module contracts::tontine {
         };
 
         // 5) Sanity: escrow empty
-        assert!(tontine.escrow_balance.value() == 0, EInsufficientFunds);
+        assert!(balance::value(&tontine.escrow_balance) == 0, EInsufficientFunds);
 
         // 6) Update state
         tontine.funds_distributed = true;
@@ -372,9 +476,9 @@ module contracts::tontine {
         event::emit(FundsDistributed {
             tontine_id: uid_to_inner(&tontine.id),
             winner: tontine.winner_address,
-            winner_payout,
+            winner_amount: winner_payout,
             total_participants,
-            bonus_amount: yield_amount,
+            yield_amount: total_yield,
             round: tontine.current_round,
         });
 
@@ -406,37 +510,170 @@ module contracts::tontine {
         });
     }
 
-    // Helper function to get winner information
-    public fun get_winner_info(tontine: &Tontine): (bool, address, u64) {
-        (tontine.winner_selected, tontine.winner_address, tontine.winner_index)
+    // Stake tontine funds with validators using enhanced staking
+    public entry fun stake_tontine_funds(
+        tontine: &mut Tontine,
+        staking_pool: &mut contracts::enhanced_staking::EnhancedStakingPool,
+        validator_address: address,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+
+        // Only creator can stake funds
+        assert!(sender == tontine.creator, ENotCreator);
+
+        // Tontine must be active
+        assert!(tontine.status == TONTINE_ACTIVE, ETontineNotActive);
+
+        // Must have participants
+        let total_participants = vec_set::length(&tontine.participants);
+        assert!(total_participants > 0, EInvalidInput);
+
+        // Get escrow balance
+        let escrow_balance = balance::value(&tontine.escrow_balance);
+        assert!(escrow_balance > 0, EInsufficientFunds);
+
+        // Convert balance to coin for staking
+        let stake_coin = coin::from_balance(balance::split(&mut tontine.escrow_balance, escrow_balance), ctx);
+
+        // Stake with the validator
+        let stake = contracts::enhanced_staking::stake_with_validator(
+            staking_pool,
+            stake_coin,
+            validator_address,
+            sender,
+            clock,
+            ctx
+        );
+
+        // Transfer the stake object to the creator for management
+        transfer::public_transfer(stake, sender);
+
+        // Emit event
+        event::emit(TontineStaked {
+            tontine_id: uid_to_inner(&tontine.id),
+            validator_address,
+            amount: escrow_balance,
+        });
     }
 
     // Helper function to check if funds have been distributed
     public fun are_funds_distributed(tontine: &Tontine): bool {
         tontine.funds_distributed
     }
+
+    // Get tontine information
     public fun get_tontine_info(tontine: &Tontine): (address, String, u64, u64, u64, u8, u64, u64) {
-        // TODO: Return tontine information
-        abort 0 // Placeholder - implement this function
+        (
+            tontine.creator,
+            tontine.name,
+            tontine.max_participants,
+            tontine.contribution_amount,
+            tontine.current_round,
+            tontine.status,
+            tontine.total_contributed,
+            vec_set::length(&tontine.participants)
+        )
     }
 
+    // Get participants list
     public fun get_participants(tontine: &Tontine): VecSet<address> {
-        // TODO: Return participants list
-        abort 0 // Placeholder - implement this function
+        tontine.participants
     }
 
+    // Get beneficiaries list (for current round)
     public fun get_beneficiaries(tontine: &Tontine): vector<address> {
-        // TODO: Return beneficiaries list
-        abort 0 // Placeholder - implement this function
+        if (table::contains(&tontine.beneficiaries, tontine.current_round)) {
+            let beneficiary = table::borrow(&tontine.beneficiaries, tontine.current_round);
+            let mut beneficiaries = vector::empty<address>();
+            vector::push_back(&mut beneficiaries, *beneficiary);
+            beneficiaries
+        } else {
+            vector::empty<address>()
+        }
     }
 
+    // Check if address is participant
     public fun is_participant(tontine: &Tontine, address: address): bool {
-        // TODO: Check if address is participant
-        abort 0 // Placeholder - implement this function
+        vec_set::contains(&tontine.participants, &address)
     }
 
+    // Check if participant has paid for current round
     public fun has_paid_current_round(tontine: &Tontine, address: address): bool {
-        // TODO: Check if participant has paid for current round
-        abort 0 // Placeholder - implement this function
+        if (table::contains(&tontine.paid_participants, tontine.current_round)) {
+            let paid_set = table::borrow(&tontine.paid_participants, tontine.current_round);
+            vec_set::contains(paid_set, &address)
+        } else {
+            false
+        }
+    }
+
+    // Add participant to tontine
+    public fun add_participant(
+        tontine: &mut Tontine,
+        participant: address,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Only creator can add participants
+        assert!(sender == tontine.creator, ENotCreator);
+        
+        // Check if not already participant
+        assert!(!vec_set::contains(&tontine.participants, &participant), EAlreadyParticipant);
+        
+        // Check if max participants not reached
+        assert!(vec_set::length(&tontine.participants) < tontine.max_participants, EMaxParticipantsReached);
+        
+        // Add participant
+        vec_set::insert(&mut tontine.participants, participant);
+    }
+
+    // Activate tontine
+    public fun activate_tontine(
+        tontine: &mut Tontine,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Only creator can activate
+        assert!(sender == tontine.creator, ENotCreator);
+        
+        // Must have participants
+        assert!(vec_set::length(&tontine.participants) > 0, EInvalidInput);
+        
+        // Set status to active
+        tontine.status = TONTINE_ACTIVE;
+    }
+
+    // Complete tontine round (when all participants have paid)
+    public fun complete_round(
+        tontine: &mut Tontine,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Only creator can complete round
+        assert!(sender == tontine.creator, ENotCreator);
+        
+        // Check if all participants have paid
+        let total_participants = vec_set::length(&tontine.participants);
+        let paid_count = if (table::contains(&tontine.paid_participants, tontine.current_round)) {
+            let paid_set = table::borrow(&tontine.paid_participants, tontine.current_round);
+            vec_set::length(paid_set)
+        } else {
+            0
+        };
+        
+        assert!(paid_count == total_participants, EInvalidInput);
+        
+        // Move to next round
+        tontine.current_round = tontine.current_round + 1;
+        
+        // If this was the last round, mark as completed
+        if (tontine.current_round > tontine.total_rounds) {
+            tontine.status = TONTINE_COMPLETED;
+        };
     }
 }

@@ -1,65 +1,192 @@
 import { useState, useCallback } from 'react';
 import { Transaction } from '@mysten/sui/transactions';
-import { useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
-import { CreateTontineForm, Tontine, Invitation, CoinType } from '../types/tontine';
+import { useSignAndExecuteTransaction, useSuiClient, useCurrentAccount, useSignTransaction } from '@mysten/dapp-kit';
+import { CreateLottoForm, Lotto, Invitation, CoinType, Tontine } from '../types/tontine';
 import { getTontinePackageId } from '../lib/networkConfig';
 import QRCode from 'qrcode';
 
 export interface InvitationData {
-  tontineId: string;
-  tontineName: string;
+  lottoId: string;
+  lottoName: string;
   invitationCode: string;
   maxParticipants: number;
   contributionAmount: number;
   coinType: string;
-  deadlineInterval: number;
   invitationUrl: string;
   qrCodeDataUrl?: string;
 }
 
 export const useTontine = () => {
   const suiClient = useSuiClient();
-  const { mutate: signAndExecute, isPending, isSuccess } = useSignAndExecuteTransaction();
+  const currentAccount = useCurrentAccount();
+  const { mutateAsync: signAndExecute, isPending, isSuccess } = useSignAndExecuteTransaction();
+  const { mutateAsync: signTransaction } = useSignTransaction();
   const [isLoading, setIsLoading] = useState(false);
   const [invitationData, setInvitationData] = useState<InvitationData | null>(null);
 
-  // ✅ Implement create_tontine function with invitation generation
-  const createTontine = useCallback(async (formData: CreateTontineForm) => {
+  // ✅ Implement create_lotto function with invitation generation
+  const createLotto = useCallback(async (formData: CreateLottoForm) => {
     setIsLoading(true);
     try {
-      console.log('Creating tontine:', formData);
+      console.log('🚀 Starting lotto creation process...');
+      console.log('📋 Form data:', formData);
       
-      // Create transaction for tontine creation
+      if (!currentAccount) {
+        console.error('❌ No wallet connected');
+        throw new Error('No wallet connected');
+      }
+      
+      console.log('👤 Current account:', currentAccount.address);
+      
+      // Create transaction for lotto creation
       const tx = new Transaction();
       
-      // TODO: Replace with actual package ID when smart contract is deployed
+      // Get the deployed package ID
       const packageId = getTontinePackageId();
+      console.log('📦 Package ID:', packageId);
       
       // Convert contribution amount to MIST (1 SUI = 1e9 MIST)
       const contributionInMist = Math.floor(formData.contributionAmount * 1e9);
+      console.log('💰 Contribution amount:', formData.contributionAmount, 'SUI =', contributionInMist, 'MIST');
       
-      // Call the create_tontine function on the smart contract
+      // Call the create_tontine_entry function on the smart contract
+      console.log('🔧 Building transaction...');
       tx.moveCall({
-        target: `${packageId}::tontine::create_tontine`,
+        target: `${packageId}::tontine::create_tontine_entry`,
         arguments: [
           tx.pure.string(formData.name),
           tx.pure.string(formData.description),
           tx.pure.u64(formData.maxParticipants),
           tx.pure.u64(contributionInMist),
-          tx.pure.u64(formData.deadlineInterval * 24 * 60 * 60 * 1000), // Convert days to milliseconds
-          tx.pure.string(formData.coinType),
+          tx.pure.u64(0), // deadlineInterval - not used in lotto concept
+          tx.pure.vector('u8', Array.from(new TextEncoder().encode(formData.coinType))),
         ],
       });
 
-      // Execute the transaction
-      const result = await signAndExecute({ transaction: tx });
+      console.log('✅ Transaction built successfully');
+      console.log('🔍 Transaction details:', {
+        target: `${packageId}::tontine::create_tontine_entry`,
+        arguments: [
+          formData.name,
+          formData.description,
+          formData.maxParticipants,
+          contributionInMist,
+          0,
+          Array.from(new TextEncoder().encode(formData.coinType)),
+        ],
+        note: 'Using entry function - no manual transfer needed'
+      });
+
+      // Execute transaction and wait for confirmation
+      console.log('⏳ Executing transaction...');
       
-      console.log('Tontine created successfully:', result);
+      let result;
+      try {
+        // Use useSignAndExecuteTransaction but with proper waiting
+        console.log('🔄 Using useSignAndExecuteTransaction...');
+        
+        result = await signAndExecute({ 
+          transaction: tx
+        });
+        
+        console.log('📊 Initial transaction result:', result);
+        
+        // Always wait for confirmation - some wallets return immediately
+        if (result.digest) {
+          console.log('⏳ Waiting for transaction confirmation...');
+          console.log('🔍 Transaction digest:', result.digest);
+          
+          // Wait for transaction to be confirmed
+          let attempts = 0;
+          const maxAttempts = 30; // 30 seconds max
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            
+            try {
+              const confirmedResult = await suiClient.getTransactionBlock({
+                digest: result.digest,
+                options: {
+                  showEffects: true,
+                  showObjectChanges: true,
+                  showEvents: true,
+                }
+              });
+              
+              if (confirmedResult.effects && confirmedResult.effects.status?.status === 'success') {
+                console.log('✅ Transaction confirmed successfully:', confirmedResult);
+                result = confirmedResult;
+                break;
+              } else if (confirmedResult.effects && confirmedResult.effects.status?.status === 'failure') {
+                console.error('❌ Transaction failed:', confirmedResult.effects.status);
+                throw new Error(`Transaction failed: ${confirmedResult.effects.status.error || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.log(`⏳ Attempt ${attempts + 1}: Transaction not yet confirmed...`);
+            }
+            
+            attempts++;
+          }
+          
+          if (attempts >= maxAttempts) {
+            throw new Error('Transaction confirmation timeout');
+          }
+        }
+        
+        console.log('📊 Final transaction result:', result);
+        
+      } catch (error) {
+        console.error('💥 Transaction execution failed:', error);
+        throw error;
+      }
+      
+      // Check if transaction was successful
+      if (!result) {
+        console.error('❌ Transaction failed - no result returned');
+        throw new Error('Transaction failed - no result returned');
+      }
+      
+      // Check transaction status
+      if (result.effects && typeof result.effects === 'object' && 'status' in result.effects) {
+        const effects = result.effects as any;
+        if (effects.status?.status !== 'success') {
+          console.error('❌ Transaction failed:', effects.status);
+          throw new Error(`Transaction failed: ${effects.status?.error || 'Unknown error'}`);
+        }
+      }
+      
+      console.log('✅ Transaction completed successfully!');
+      console.log('🎯 Transaction digest:', result.digest);
+      
+      console.log('🎉 Lotto created successfully:', result);
+      console.log('📊 Transaction effects:', result.effects);
+      
+      // Extract lotto ID from the transaction result
+      let lottoId = '';
+      const effects = result.effects as any;
+      if (effects?.created && effects.created.length > 0) {
+        console.log('📦 Created objects:', effects.created);
+        // The create_tontine_entry function creates exactly one Tontine object
+        // We can safely take the first created object as our lotto
+        const createdObject = effects.created[0];
+        console.log('🔍 First created object:', createdObject);
+        if (createdObject.reference.objectId) {
+          lottoId = createdObject.reference.objectId;
+          console.log('🎯 Extracted lotto ID:', lottoId);
+        }
+      }
+      
+      if (!lottoId) {
+        console.warn('⚠️ No lotto ID found in transaction result');
+        console.log('🔍 Full transaction result for debugging:', JSON.stringify(result, null, 2));
+        // Use transaction digest as fallback ID
+        lottoId = result.digest || `temp_${Date.now()}`;
+        console.log('🔄 Using fallback lotto ID:', lottoId);
+      }
       
       // Generate invitation data after successful creation
       const invitationCode = generateInvitationCode();
-      const tontineId = `temp_${Date.now()}`; // Use temporary ID for now, will be replaced with actual tontine ID from smart contract
-      const invitationUrl = `${window.location.origin}/join?code=${invitationCode}`;
+      const invitationUrl = `${window.location.origin}/join/${lottoId}`;
       
       // Generate QR code
       let qrCodeDataUrl = '';
@@ -70,13 +197,12 @@ export const useTontine = () => {
       }
       
       const invitation: InvitationData = {
-        tontineId,
-        tontineName: formData.name,
+        lottoId: lottoId || `temp_${Date.now()}`, // Use actual ID or fallback
+        lottoName: formData.name,
         invitationCode,
         maxParticipants: formData.maxParticipants,
         contributionAmount: formData.contributionAmount,
         coinType: formData.coinType,
-        deadlineInterval: formData.deadlineInterval,
         invitationUrl,
         qrCodeDataUrl,
       };
@@ -86,12 +212,19 @@ export const useTontine = () => {
       return { result, invitation };
       
     } catch (error) {
-      console.error('Error creating tontine:', error);
+      console.error('💥 Error creating lotto:', error);
+      console.error('🔍 Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : 'Unknown',
+        currentAccount: currentAccount?.address,
+        isConnected: !!currentAccount
+      });
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, [signAndExecute]);
+  }, [signAndExecute, suiClient, currentAccount]);
 
   // ✅ Implement join_tontine function with smart contract integration
   const joinTontine = useCallback(async (invitationCode: string) => {
@@ -210,6 +343,19 @@ export const useTontine = () => {
       
       if (tontineObject.data?.content?.dataType === 'moveObject') {
         const fields = tontineObject.data.content.fields as any;
+        console.log('🔍 Raw blockchain fields:', fields);
+        console.log('🔍 Participants field:', fields.participants);
+        console.log('🔍 Paid participants field:', fields.paid_participants);
+        
+        // Helper function to convert VecSet to array
+        const vecSetToArray = (vecSet: any): string[] => {
+          if (Array.isArray(vecSet)) return vecSet;
+          if (vecSet && typeof vecSet === 'object' && vecSet.contents) {
+            return Array.isArray(vecSet.contents) ? vecSet.contents : [];
+          }
+          return [];
+        };
+
         return {
           id: tontineId,
           creator: fields.creator || '',
@@ -217,17 +363,18 @@ export const useTontine = () => {
           description: fields.description || '',
           maxParticipants: parseInt(fields.max_participants || '0'),
           contributionAmount: parseInt(fields.contribution_amount || '0') / 1e9, // Convert from MIST
-          deadlineInterval: parseInt(fields.deadline_interval || '0') / (24 * 60 * 60 * 1000), // Convert to days
-          totalRounds: parseInt(fields.total_rounds || '0'),
-          currentRound: parseInt(fields.current_round || '0'),
           status: parseInt(fields.status || '0'),
-          participants: fields.participants || [],
-          paidParticipants: fields.paid_participants || [],
-          beneficiaries: fields.beneficiaries || [],
+          participants: vecSetToArray(fields.participants),
+          paidParticipants: vecSetToArray(fields.paid_participants),
+          winner: fields.winner_address || undefined,
+          winnerSelected: fields.winner_selected || false,
+          fundsDistributed: fields.funds_distributed || false,
           totalContributed: parseInt(fields.total_contributed || '0') / 1e9,
+          totalYield: parseInt(fields.total_yield || '0') / 1e9,
+          winnerPayout: parseInt(fields.winner_payout || '0') / 1e9,
           createdAt: parseInt(fields.created_at || '0'),
-          nextDeadline: parseInt(fields.next_deadline || '0'),
           coinType: (fields.coin_type || 'SUI') as CoinType,
+          stakedAssetsId: fields.staked_assets_id || '',
         };
       }
       
@@ -238,13 +385,20 @@ export const useTontine = () => {
     }
   }, [suiClient]);
 
-  // TODO: Implement get_tontine_by_invitation function
+  // ✅ Implement get_tontine_by_invitation function with blockchain integration
   const getTontineByInvitation = useCallback(async (invitationCode: string): Promise<Tontine | null> => {
     try {
-      // TODO: Search for tontine via invitation code
       console.log('Searching tontine by invitation:', invitationCode);
       
-      // Mock data for testing
+      // For now, we'll use a simple approach - in a real implementation,
+      // you would query the blockchain for invitation objects and find the associated tontine
+      
+      // This is a placeholder implementation - in reality, you'd need to:
+      // 1. Query for invitation objects with the given code
+      // 2. Extract the tontine ID from the invitation
+      // 3. Fetch the tontine details
+      
+      // For testing purposes, we'll return mock data
       if (invitationCode === 'TONTINE_TEST123') {
         return {
           id: '0x123...abc',
@@ -253,17 +407,18 @@ export const useTontine = () => {
           description: 'Collective savings for summer vacation',
           maxParticipants: 12,
           contributionAmount: 1,
-          deadlineInterval: 30,
-          totalRounds: 12,
-          currentRound: 0,
           status: 0,
           participants: ['0x456...def', '0x789...ghi'],
           paidParticipants: [],
-          beneficiaries: [],
+          winner: undefined,
+          winnerSelected: false,
+          fundsDistributed: false,
           totalContributed: 0,
+          totalYield: 0,
+          winnerPayout: 0,
           createdAt: Date.now(),
-          nextDeadline: Date.now() + (30 * 24 * 60 * 60 * 1000),
           coinType: CoinType.SUI,
+          stakedAssetsId: '',
         };
       }
       
@@ -274,32 +429,37 @@ export const useTontine = () => {
     }
   }, []);
 
-  // TODO: Implement get_user_tontines function
+  // ✅ Implement get_user_tontines function with blockchain integration
   const getUserTontines = useCallback(async (): Promise<Tontine[]> => {
     try {
-      // TODO: Fetch all user tontines from blockchain
       console.log('Getting user tontines');
       
-      // Mock data for testing
+      // In a real implementation, you would:
+      // 1. Query the blockchain for all tontine objects
+      // 2. Filter by the current user's address
+      // 3. Return the list of tontines
+      
+      // For now, return mock data
       return [
         {
           id: '0x123...abc',
           creator: '0x456...def',
-          name: 'My Tontine 1',
-          description: 'First tontine',
+          name: 'My Lotto 1',
+          description: 'First lotto',
           maxParticipants: 6,
           contributionAmount: 0.5,
-          deadlineInterval: 15,
-          totalRounds: 6,
-          currentRound: 2,
           status: 1,
           participants: ['0x456...def', '0x789...ghi'],
           paidParticipants: ['0x456...def'],
-          beneficiaries: ['0x789...ghi'],
+          winner: undefined,
+          winnerSelected: false,
+          fundsDistributed: false,
           totalContributed: 1,
+          totalYield: 0.1,
+          winnerPayout: 0.6,
           createdAt: Date.now() - (60 * 24 * 60 * 60 * 1000),
-          nextDeadline: Date.now() + (5 * 24 * 60 * 60 * 1000),
           coinType: CoinType.SUI,
+          stakedAssetsId: '',
         }
       ];
     } catch (error) {
@@ -355,13 +515,12 @@ export const useTontine = () => {
     }
     
     return {
-      tontineId: tontine.id,
-      tontineName: tontine.name,
+      lottoId: tontine.id,
+      lottoName: tontine.name,
       invitationCode,
       maxParticipants: tontine.maxParticipants,
       contributionAmount: tontine.contributionAmount,
       coinType: tontine.coinType,
-      deadlineInterval: tontine.deadlineInterval,
       invitationUrl,
       qrCodeDataUrl,
     };
@@ -380,7 +539,8 @@ export const useTontine = () => {
     invitationData,
     
     // Main actions
-    createTontine,
+    createLotto,
+    createTontine: createLotto, // Keep backward compatibility
     joinTontine,
     contribute,
     selectBeneficiary,

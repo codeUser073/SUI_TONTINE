@@ -116,12 +116,12 @@ export default function JoinTontine() {
           <div className="text-center space-y-4">
             <div className="inline-flex items-center space-x-2 bg-primary-600/20 text-primary-400 px-4 py-2 rounded-full text-sm font-medium">
               <Users className="w-4 h-4" />
-              <span>Join Darte</span>
+              <span>Join Yield Lotto</span>
             </div>
             
-            <h1 className="text-4xl font-bold text-white">Join a Darte</h1>
+            <h1 className="text-4xl font-bold text-white">Join a Yield Lotto</h1>
             <p className="text-white/70">
-              Enter an invitation code to join an existing darte and start participating.
+              Enter an invitation code to join an existing lotto and have a chance to win all the staking rewards!
             </p>
           </div>
 
@@ -135,7 +135,7 @@ export default function JoinTontine() {
                     Invitation Code
                   </CardTitle>
                   <CardDescription className="text-white/70">
-                    Enter the invitation code you received from a darte creator.
+                    Enter the invitation code you received from a lotto creator.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -145,7 +145,7 @@ export default function JoinTontine() {
                       id="invitation"
                       value={invitationCode}
                       onChange={(e) => setInvitationCode(e.target.value)}
-                      placeholder="e.g., TONTINE_ABC12345"
+                      placeholder="e.g., LOTTO_ABC12345"
                       className="bg-white/10 border-white/20 text-white placeholder-white/50"
                     />
                   </div>
@@ -163,7 +163,7 @@ export default function JoinTontine() {
                     ) : (
                       <>
                         <Target className="w-4 h-4 mr-2" />
-                        Search Darte
+                        Search Lotto
                       </>
                     )}
                   </Button>
@@ -225,25 +225,25 @@ export default function JoinTontine() {
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <Calendar className="w-4 h-4 text-primary-400" />
-                            <span className="text-white/70 text-sm">Frequency</span>
+                            <span className="text-white/70 text-sm">Status</span>
                           </div>
                           <p className="text-white font-medium">
-                            Every {tontine.deadlineInterval} days
+                            {tontine.status === 0 ? 'Open' : tontine.status === 1 ? 'Active' : 'Completed'}
                           </p>
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <Target className="w-4 h-4 text-primary-400" />
-                            <span className="text-white/70 text-sm">Total Rounds</span>
+                            <span className="text-white/70 text-sm">Total Pool</span>
                           </div>
-                          <p className="text-white font-medium">{tontine.totalRounds}</p>
+                          <p className="text-white font-medium">{tontine.maxParticipants * tontine.contributionAmount} {tontine.coinType}</p>
                         </div>
                       </div>
 
                       <div className="border-t border-white/20 pt-4">
                         <div className="flex justify-between items-center">
-                          <span className="text-white/70">Total Amount:</span>
+                          <span className="text-white/70">Total Pool:</span>
                           <span className="text-white font-bold text-lg">
                             {tontine.maxParticipants * tontine.contributionAmount} {tontine.coinType}
                           </span>
@@ -264,12 +264,12 @@ export default function JoinTontine() {
                       ) : tontine.participants.length >= tontine.maxParticipants ? (
                         <>
                           <AlertCircle className="w-4 h-4 mr-2" />
-                          Darte Full
+                          Lotto Full
                         </>
                       ) : (
                         <>
                           <CheckCircle className="w-4 h-4 mr-2" />
-                          Join Darte
+                          Join Lotto
                         </>
                       )}
                     </Button>
@@ -278,16 +278,16 @@ export default function JoinTontine() {
               ) : (
                 <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                   <CardHeader>
-                    <CardTitle className="text-xl text-white">No Darte Selected</CardTitle>
+                    <CardTitle className="text-xl text-white">No Lotto Selected</CardTitle>
                     <CardDescription className="text-white/70">
-                      Enter an invitation code to view darte details.
+                      Enter an invitation code to view lotto details.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-center py-8">
                       <Target className="w-16 h-16 text-white/30 mx-auto mb-4" />
                       <p className="text-white/50">
-                        Search for a Darte using an invitation code to see its details here.
+                        Search for a Lotto using an invitation code to see its details here.
                       </p>
                     </div>
                   </CardContent>
@@ -303,11 +303,11 @@ export default function JoinTontine() {
                   <div className="space-y-3 text-sm text-white/70">
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>Ask a friend who created a darte for their invitation code</p>
+                      <p>Ask a friend who created a lotto for their invitation code</p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>Invitation codes look like: TONTINE_ABC12345</p>
+                      <p>Invitation codes look like: LOTTO_ABC12345</p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>

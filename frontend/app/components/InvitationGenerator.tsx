@@ -10,30 +10,30 @@ import { toast } from 'react-hot-toast';
 import { InvitationData } from '../src/hooks/useTontine';
 
 interface InvitationGeneratorProps {
-  tontineData: InvitationData;
+  lottoData: InvitationData;
   onClose?: () => void;
 }
 
-export function InvitationGenerator({ tontineData, onClose }: InvitationGeneratorProps) {
-  const [invitationUrl, setInvitationUrl] = useState(tontineData.invitationUrl);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState(tontineData.qrCodeDataUrl || '');
+export function InvitationGenerator({ lottoData, onClose }: InvitationGeneratorProps) {
+  const [invitationUrl, setInvitationUrl] = useState(lottoData.invitationUrl);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState(lottoData.qrCodeDataUrl || '');
 
   useEffect(() => {
-    // Use the invitation URL from tontineData if available
-    if (tontineData.invitationUrl) {
-      setInvitationUrl(tontineData.invitationUrl);
+    // Use the invitation URL from lottoData if available
+    if (lottoData.invitationUrl) {
+      setInvitationUrl(lottoData.invitationUrl);
     } else {
       // Fallback: generate invitation URL
       const baseUrl = window.location.origin;
-      const url = `${baseUrl}/join?code=${tontineData.invitationCode}`;
+      const url = `${baseUrl}/join?code=${lottoData.invitationCode}`;
       setInvitationUrl(url);
     }
 
-    // Use QR code from tontineData if available
-    if (tontineData.qrCodeDataUrl) {
-      setQrCodeDataUrl(tontineData.qrCodeDataUrl);
+    // Use QR code from lottoData if available
+    if (lottoData.qrCodeDataUrl) {
+      setQrCodeDataUrl(lottoData.qrCodeDataUrl);
     }
-  }, [tontineData]);
+  }, [lottoData]);
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -48,8 +48,8 @@ export function InvitationGenerator({ tontineData, onClose }: InvitationGenerato
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join ${tontineData.tontineName}`,
-          text: `Join my tontine: ${tontineData.tontineName}`,
+          title: `Join ${lottoData.lottoName}`,
+          text: `Join my lotto: ${lottoData.lottoName}`,
           url: invitationUrl,
         });
       } catch (error) {
@@ -72,19 +72,19 @@ export function InvitationGenerator({ tontineData, onClose }: InvitationGenerato
         <CardContent className="space-y-6">
           {/* Tontine Info */}
           <div className="bg-white/5 rounded-lg p-4 space-y-3">
-            <h3 className="text-lg font-semibold text-white">{tontineData.tontineName}</h3>
+            <h3 className="text-lg font-semibold text-white">{lottoData.lottoName}</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center space-x-2">
                 <Users className="w-4 h-4 text-primary-400" />
-                <span className="text-white/70">{tontineData.maxParticipants} participants</span>
+                <span className="text-white/70">{lottoData.maxParticipants} participants</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Coins className="w-4 h-4 text-primary-400" />
-                <span className="text-white/70">{tontineData.contributionAmount} {tontineData.coinType}</span>
+                <span className="text-white/70">{lottoData.contributionAmount} {lottoData.coinType}</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Calendar className="w-4 h-4 text-primary-400" />
-                <span className="text-white/70">Every {tontineData.deadlineInterval} days</span>
+                <span className="text-white/70">Single Round</span>
               </div>
             </div>
           </div>
@@ -94,12 +94,12 @@ export function InvitationGenerator({ tontineData, onClose }: InvitationGenerato
             <Label className="text-white">Invitation Code</Label>
             <div className="flex space-x-2">
               <Input
-                value={tontineData.invitationCode}
+                value={lottoData.invitationCode}
                 readOnly
                 className="bg-white/10 border-white/20 text-white font-mono"
               />
               <Button
-                onClick={() => copyToClipboard(tontineData.invitationCode)}
+                onClick={() => copyToClipboard(lottoData.invitationCode)}
                 variant="outline"
                 size="sm"
                 className="border-white/20 text-white hover:bg-white/10"

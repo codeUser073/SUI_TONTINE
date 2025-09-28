@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWalletInfo } from '../src/hooks/useWallet';
 import { useTontine } from '../src/hooks/useTontine';
-import { CreateTontineForm, CoinType } from '../src/types/tontine';
+import { CreateLottoForm, CoinType } from '../src/types/tontine';
 import { InvitationGenerator } from '../components/InvitationGenerator';
+import { TontineTemplates } from '../components/TontineTemplates';
 import { 
   Users, 
   Coins, 
@@ -12,7 +14,8 @@ import {
   Target, 
   Plus, 
   ArrowLeft,
-  Save
+  Save,
+  Shield
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -22,22 +25,22 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
-import { TontineTemplates } from '../components/TontineTemplates';
+import { formatCurrency } from '../src/utils/formatting';
 
-export default function CreateTontine() {
+export default function CreateLotto() {
+  const router = useRouter();
   const { currentAccount } = useWalletInfo();
   const { createTontine, isLoading, invitationData, clearInvitationData } = useTontine();
-  const [formData, setFormData] = useState<CreateTontineForm>({
+  const [formData, setFormData] = useState<CreateLottoForm>({
     name: '',
     description: '',
     maxParticipants: 12,
     contributionAmount: 1,
-    deadlineInterval: 30, // 30 days default
     coinType: CoinType.SUI,
   });
   const [isCreating, setIsCreating] = useState(false);
   const [showTemplates, setShowTemplates] = useState(true);
-  const frequencySelectRef = useRef<HTMLButtonElement>(null);
+  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const coinSelectRef = useRef<HTMLButtonElement>(null);
 
   // Handle dropdown scrolling
@@ -64,48 +67,30 @@ export default function CreateTontine() {
   };
 
   // TODO: Implement form input handlers
-  const handleInputChange = (field: keyof CreateTontineForm, value: string | number) => {
+  const handleInputChange = (field: keyof CreateLottoForm, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  // ✅ Enhanced calculation helpers
-  const calculateTotalDuration = () => {
-    return formData.maxParticipants * formData.deadlineInterval;
+  // ✅ Enhanced calculation helpers for lotto
+  const calculateTotalPool = () => {
+    return formData.maxParticipants * formData.contributionAmount;
   };
 
-  const calculateTotalAmount = () => {
-    return Math.round(formData.maxParticipants * formData.contributionAmount * 100) / 100;
+  const calculatePotentialYield = () => {
+    // Estimate 5% annual yield (simplified calculation)
+    const totalPool = calculateTotalPool();
+    return totalPool * 0.05; // 5% of total pool as potential yield
   };
 
-  const calculateMonthlyContribution = () => {
-    const daysInMonth = 30;
-    const contributionsPerMonth = daysInMonth / formData.deadlineInterval;
-    return Math.round(contributionsPerMonth * formData.contributionAmount * 100) / 100;
-  };
-
-  const calculateEstimatedEndDate = () => {
-    const totalDays = calculateTotalDuration();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + totalDays);
-    return endDate.toLocaleDateString();
-  };
-
-  const getFrequencyText = () => {
-    switch (formData.deadlineInterval) {
-      case 7: return 'Weekly';
-      case 15: return 'Bi-weekly';
-      case 30: return 'Monthly';
-      case 60: return 'Bi-monthly';
-      case 90: return 'Quarterly';
-      default: return `Every ${formData.deadlineInterval} days`;
-    }
+  const calculateWinnerPayout = () => {
+    return formData.contributionAmount + calculatePotentialYield();
   };
 
   // Handle template selection
-  const handleSelectTemplate = (templateData: Partial<CreateTontineForm>) => {
+  const handleSelectTemplate = (templateData: Partial<CreateLottoForm>) => {
     setFormData(prev => ({
       ...prev,
       ...templateData
@@ -114,8 +99,8 @@ export default function CreateTontine() {
     toast.success('Template applied! You can modify the parameters below.');
   };
 
-  // ✅ Enhanced tontine creation with validation
-  const handleCreateTontine = async () => {
+  // ✅ Enhanced lotto creation with payment confirmation
+  const handleCreateLotto = async () => {
     if (!currentAccount) {
       toast.error('Please connect your wallet first');
       return;
@@ -123,12 +108,12 @@ export default function CreateTontine() {
 
     // Enhanced validation
     if (!formData.name.trim()) {
-      toast.error('Please enter a tontine name');
+      toast.error('Please enter a lotto name');
       return;
     }
 
     if (formData.name.length < 3) {
-      toast.error('Tontine name must be at least 3 characters long');
+      toast.error('Lotto name must be at least 3 characters long');
       return;
     }
 
@@ -152,20 +137,59 @@ export default function CreateTontine() {
       return;
     }
 
+    // Show payment confirmation
+    setShowPaymentConfirmation(true);
+  };
+
+
+  const handleConfirmPayment = async () => {
     setIsCreating(true);
-            try {
-              const result = await createTontine(formData);
-              toast.success('🎉 Darte created successfully!');
-              
-              // The invitation data is automatically set in the useTontine hook
-              // The InvitationGenerator will be shown automatically
-              
-            } catch (error) {
-              console.error('Failed to create tontine:', error);
-              toast.error('Failed to create tontine. Please try again.');
-            } finally {
-              setIsCreating(false);
-            }
+    setShowPaymentConfirmation(false); // Hide the modal immediately
+    
+    try {
+      console.log('🎯 Starting payment confirmation...');
+      console.log('📋 Form data:', formData);
+      console.log('👤 Current account:', currentAccount?.address);
+      console.log('🔗 Wallet connected:', !!currentAccount);
+      
+      // Show loading toast
+      toast.loading('Creating your Yield Lotto...', { id: 'creating-lotto' });
+      
+      console.log('⏳ Calling createTontine function...');
+      const result = await createTontine(formData);
+      console.log('🎉 Lotto creation result received:', result);
+      
+      // Dismiss loading toast and show success
+      toast.dismiss('creating-lotto');
+      toast.success('🎉 Yield Lotto created successfully! Redirecting...');
+      
+      // Immediately redirect to the lotto room
+      if (result.invitation?.lottoId) {
+        console.log('🔄 Redirecting to lotto room:', result.invitation.lottoId);
+        console.log('🌐 Redirect URL:', `/lotto/${result.invitation.lottoId}`);
+        
+        // Use replace instead of push to avoid back button issues
+        router.replace(`/lotto/${result.invitation.lottoId}`);
+      } else {
+        console.warn('⚠️ No lotto ID found in result, staying on create page');
+        console.log('🔍 Full result for debugging:', result);
+        toast.error('Lotto created but could not redirect. Please check your lotto manually.');
+      }
+      
+    } catch (error) {
+      console.error('💥 Failed to create lotto:', error);
+      console.error('🔍 Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : 'Unknown',
+        formData,
+        currentAccount: currentAccount?.address
+      });
+      toast.error(`Failed to create lotto: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCreating(false);
+      setShowPaymentConfirmation(false);
+    }
   };
 
   // TODO: Implement wallet connection check
@@ -179,7 +203,7 @@ export default function CreateTontine() {
                 <Target className="w-16 h-16 text-primary-400 mx-auto mb-4" />
                 <CardTitle className="text-2xl font-bold text-white">Connect Your Wallet</CardTitle>
                 <CardDescription className="text-white/70">
-                  You need to connect your wallet to create a tontine.
+                  You need to connect your wallet to create a lotto.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -201,10 +225,91 @@ export default function CreateTontine() {
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
               {/* Show InvitationGenerator if invitation data is available */}
               {invitationData && (
-                <InvitationGenerator 
-                  tontineData={invitationData} 
-                  onClose={clearInvitationData}
-                />
+              <InvitationGenerator 
+                lottoData={invitationData} 
+                onClose={clearInvitationData}
+              />
+              )}
+              
+              {/* Show Payment Confirmation Modal */}
+              {showPaymentConfirmation && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <Card className="bg-white/10 backdrop-blur-sm border-white/20 max-w-md w-full">
+                    <CardHeader>
+                      <CardTitle className="text-xl text-white flex items-center">
+                        <Coins className="w-6 h-6 mr-2 text-primary-400" />
+                        Confirm Payment
+                      </CardTitle>
+                      <CardDescription className="text-white/70">
+                        You're about to create a lotto and pay the entry fee as the first participant.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Lotto Summary */}
+                      <div className="bg-white/5 rounded-lg p-4 space-y-3">
+                        <h4 className="text-white font-medium">{formData.name}</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-white/70">Participants:</span>
+                            <div className="text-white font-medium">{formData.maxParticipants}</div>
+                          </div>
+                          <div>
+                            <span className="text-white/70">Entry Fee:</span>
+                            <div className="text-white font-medium">{formData.contributionAmount} {formData.coinType}</div>
+                          </div>
+                          <div>
+                            <span className="text-white/70">Total Pool:</span>
+                            <div className="text-white font-medium">{formData.maxParticipants * formData.contributionAmount} {formData.coinType}</div>
+                          </div>
+                          <div>
+                            <span className="text-white/70">Your Payment:</span>
+                            <div className="text-white font-bold">{formData.contributionAmount} {formData.coinType}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Payment Info */}
+                      <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Shield className="w-5 h-5 text-green-400" />
+                          <span className="text-green-400 font-medium">Zero Risk Guarantee</span>
+                        </div>
+                        <p className="text-white/70 text-sm">
+                          You'll get your {formData.contributionAmount} {formData.coinType} back regardless of the outcome. 
+                          Only the staking yield is at stake!
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex space-x-3">
+                        <Button
+                          onClick={() => setShowPaymentConfirmation(false)}
+                          variant="outline"
+                          className="flex-1 border-white/20 text-white hover:bg-white/10"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleConfirmPayment}
+                          disabled={isCreating || isLoading}
+                          className="flex-1 bg-primary-600 hover:bg-primary-700"
+                        >
+                          {isCreating || isLoading ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                              Creating...
+                            </>
+                          ) : (
+                            <>
+                              <Coins className="w-4 h-4 mr-2" />
+                              Pay & Create
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
               
               <div className="container mx-auto px-4 py-12">
@@ -213,12 +318,12 @@ export default function CreateTontine() {
           <div className="text-center space-y-4">
             <div className="inline-flex items-center space-x-2 bg-primary-600/20 text-primary-400 px-4 py-2 rounded-full text-sm font-medium">
               <Plus className="w-4 h-4" />
-              <span>Create Darte</span>
+              <span>Create Yield Lotto</span>
             </div>
             
-            <h1 className="text-4xl font-bold text-white">New Darte</h1>
+            <h1 className="text-4xl font-bold text-white">New Yield Lotto</h1>
             <p className="text-white/70">
-              Create a Darte and invite your friends to participate in this collective savings.
+              Create a yield lotto where everyone gets their deposit back, but one winner takes all the staking rewards!
             </p>
           </div>
 
@@ -237,14 +342,14 @@ export default function CreateTontine() {
                 variant="outline"
                 className="border-white/20 text-white hover:bg-white/10"
               >
-                Create Custom Darte
+                Create Custom Lotto
               </Button>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Form */}
-            <div className="lg:col-span-2 space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Form */}
+                    <div className="lg:col-span-2 space-y-6">
               <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardHeader>
                   <CardTitle className="text-xl text-white flex items-center">
@@ -254,12 +359,12 @@ export default function CreateTontine() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="text-white">Darte Name </Label>
+                    <Label htmlFor="name" className="text-white">Lotto Name</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => handleInputChange('name', e.target.value)}
-                      placeholder="e.g., Vacation Fund 2024"
+                      placeholder="e.g., Weekend Getaway Lotto"
                       className="bg-white/10 border-white/20 text-white placeholder-white/50"
                     />
                   </div>
@@ -270,7 +375,7 @@ export default function CreateTontine() {
                       id="description"
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
-                      placeholder="Describe the purpose of this tontine..."
+                      placeholder="Describe the purpose of this lotto..."
                       className="bg-white/10 border-white/20 text-white placeholder-white/50"
                       rows={3}
                     />
@@ -321,35 +426,6 @@ export default function CreateTontine() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="frequency" className="text-white">Contribution Frequency</Label>
-                      <Select
-                        value={formData.deadlineInterval.toString()}
-                        onValueChange={(value) => handleInputChange('deadlineInterval', parseInt(value))}
-                        onOpenChange={(isOpen) => {
-                          handleDropdownOpen(isOpen, frequencySelectRef.current || undefined);
-                        }}
-                      >
-                        <SelectTrigger ref={frequencySelectRef} className="bg-white/10 border-white/20 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent 
-                          position="popper" 
-                          side="bottom" 
-                          sideOffset={4} 
-                          avoidCollisions={false}
-                          align="start"
-                          className="bg-white/10 backdrop-blur-sm border-white/20 text-white z-50 max-h-60 overflow-y-auto rounded-lg"
-                        >
-                          <SelectItem value="7" className="text-white hover:bg-white/15 focus:bg-white/15 transition-colors duration-200">Weekly (7 days)</SelectItem>
-                          <SelectItem value="15" className="text-white hover:bg-white/15 focus:bg-white/15 transition-colors duration-200">Bi-weekly (15 days)</SelectItem>
-                          <SelectItem value="30" className="text-white hover:bg-white/15 focus:bg-white/15 transition-colors duration-200">Monthly (30 days)</SelectItem>
-                          <SelectItem value="60" className="text-white hover:bg-white/15 focus:bg-white/15 transition-colors duration-200">Bi-monthly (60 days)</SelectItem>
-                          <SelectItem value="90" className="text-white hover:bg-white/15 focus:bg-white/15 transition-colors duration-200">Quarterly (90 days)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
                       <Label htmlFor="coin" className="text-white">Crypto Type</Label>
                       <Select
                         value={formData.coinType}
@@ -388,8 +464,9 @@ export default function CreateTontine() {
                   </Button>
                 </Link>
                 
+                
                 <Button
-                  onClick={handleCreateTontine}
+                  onClick={handleCreateLotto}
                   disabled={isCreating || isLoading || !formData.name.trim()}
                   className="flex-1 bg-primary-600 hover:bg-primary-700"
                 >
@@ -401,7 +478,7 @@ export default function CreateTontine() {
                   ) : (
                     <>
                       <Save className="w-4 h-4 mr-2" />
-                      Create Darte
+                      Create Lotto
                     </>
                   )}
                 </Button>
@@ -412,7 +489,7 @@ export default function CreateTontine() {
             <div className="space-y-6">
               <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardHeader>
-                  <CardTitle className="text-lg text-white">Darte Summary</CardTitle>
+                  <CardTitle className="text-lg text-white">Lotto Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex justify-between">
@@ -421,45 +498,38 @@ export default function CreateTontine() {
                   </div>
                   
                   <div className="flex justify-between">
-                    <span className="text-white/70">Contribution:</span>
+                    <span className="text-white/70">Entry Fee:</span>
                     <span className="text-white font-medium">
                       {formData.contributionAmount} {formData.coinType}
                     </span>
                   </div>
                   
                   <div className="flex justify-between">
-                    <span className="text-white/70">Frequency:</span>
+                    <span className="text-white/70">Total Pool:</span>
                     <span className="text-white font-medium">
-                      {getFrequencyText()}
+                      {calculateTotalPool()} {formData.coinType}
                     </span>
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-white/70">Monthly Contribution:</span>
+                    <span className="text-white/70">Potential Yield:</span>
                     <span className="text-white font-medium">
-                      ~{calculateMonthlyContribution()} {formData.coinType}
+                      ~{formatCurrency(calculatePotentialYield())} {formData.coinType}
                     </span>
                   </div>
                   
                   <div className="flex justify-between">
-                    <span className="text-white/70">Total Duration:</span>
+                    <span className="text-white/70">Winner Payout:</span>
                     <span className="text-white font-medium">
-                      {Math.round(calculateTotalDuration() / 30)} months
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-white/70">Estimated End:</span>
-                    <span className="text-white font-medium text-sm">
-                      {calculateEstimatedEndDate()}
+                      {formatCurrency(calculateWinnerPayout())} {formData.coinType}
                     </span>
                   </div>
                   
                   <div className="border-t border-white/20 pt-4">
                     <div className="flex justify-between">
-                      <span className="text-white/70">Total Amount:</span>
+                      <span className="text-white/70">Everyone Gets Back:</span>
                       <span className="text-white font-bold text-lg">
-                        {calculateTotalAmount() || 0} {formData.coinType}
+                        {formData.contributionAmount} {formData.coinType}
                       </span>
                     </div>
                   </div>
@@ -475,19 +545,19 @@ export default function CreateTontine() {
                   <div className="space-y-3 text-sm text-white/70">
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>Each participant contributes the defined amount</p>
+                      <p>Each participant contributes the same amount</p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>At each deadline, one participant receives the total pot</p>
+                      <p>Funds are automatically staked to earn yield</p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>Rotation happens automatically</p>
+                      <p>One winner is selected to receive all the yield</p>
                     </div>
                     <div className="flex items-start space-x-2">
                       <div className="w-2 h-2 bg-primary-400 rounded-full mt-2 flex-shrink-0"></div>
-                      <p>Everything is transparent on the blockchain</p>
+                      <p>Everyone else gets their deposit back - zero risk!</p>
                     </div>
                   </div>
                 </CardContent>
